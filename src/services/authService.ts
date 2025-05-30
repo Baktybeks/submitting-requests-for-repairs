@@ -1,187 +1,578 @@
-// src/hooks/useAuth.ts (обновленная версия)
+// src/services/authService.ts (Рефакторинг)
 
-import { useAuthStore } from "@/store/authStore";
-import {
-  useCurrentUser,
-  useLogin,
-  useLogout,
-  useRegister,
-} from "@/services/authService";
-import { UserRole } from "@/types";
-import { useEffect } from "react";
-import { toast } from "react-toastify";
+import { ID, Query, AppwriteException } from "appwrite";
+import { account, databases, appwriteHelpers } from "./appwriteClient";
+import { appwriteConfig } from "@/constants/appwriteConfig";
+import { User, UserRole } from "@/types";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useAuth() {
-  const { user, setUser, clearUser } = useAuthStore();
+// Типы для API
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
 
-  // React Query хуки
-  const {
-    data: currentUser,
-    isLoading: isCheckingAuth,
-    error: authError,
-  } = useCurrentUser();
-  const loginMutation = useLogin();
-  const logoutMutation = useLogout();
-  const registerMutation = useRegister();
+export interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  specialization?: string;
+  phone?: string;
+}
 
-  // Синхронизируем состояние Zustand с React Query
-  useEffect(() => {
-    if (currentUser && !("notActivated" in currentUser)) {
-      setUser(currentUser);
-    } else {
-      clearUser();
-    }
-  }, [currentUser, setUser, clearUser]);
+interface NotActivatedUser {
+  notActivated: true;
+  message: string;
+}
 
-  // Функции для компонентов
-  const login = async (email: string, password: string) => {
+// API функции
+export const authApi = {
+  // Получить текущего пользователя
+  getCurrentUser: async (): Promise<User | NotActivatedUser | null> => {
     try {
-      const user = await loginMutation.mutateAsync({ email, password });
-      setUser(user);
-      return user;
-    } catch (error) {
-      clearUser();
-      throw error;
-    }
-  };
+      // Проверяем сессию в Appwrite
+      const appwriteUser = await account.get();
 
-  const logout = async () => {
-    try {
-      await logoutMutation.mutateAsync();
-      clearUser();
-      toast.info("👋 Вы успешно вышли из системы", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-    } catch (error) {
-      // Даже если запрос не удался, очищаем локальное состояние
-      clearUser();
-      toast.warning("⚠️ Произошла ошибка при выходе, но сессия очищена", {
-        position: "top-right",
-        autoClose: 4000,
-      });
-      throw error;
-    }
-  };
-
-  const register = async (
-    name: string,
-    email: string,
-    password: string,
-    role: UserRole,
-    specialization?: string,
-    phone?: string
-  ) => {
-    try {
-      const result = await registerMutation.mutateAsync({
-        name,
-        email,
-        password,
-        role,
-        specialization,
-        phone,
-      });
-
-      return result;
-    } catch (error: any) {
-      // Показываем детализированную ошибку регистрации
-      const message = error?.message || "Неизвестная ошибка при регистрации";
-
-      if (
-        message.includes("уже существует") ||
-        message.includes("already exists")
-      ) {
-        toast.error("📧 Пользователь с таким email уже зарегистрирован", {
-          position: "top-center",
-          autoClose: 5000,
-        });
-      } else if (message.includes("пароль") || message.includes("password")) {
-        toast.error("🔒 Ошибка с паролем. Проверьте требования к паролю", {
-          position: "top-center",
-          autoClose: 5000,
-        });
-      } else if (message.includes("email") || message.includes("Email")) {
-        toast.error("📧 Некорректный формат email адреса", {
-          position: "top-center",
-          autoClose: 5000,
-        });
-      } else {
-        toast.error(`❌ Ошибка регистрации: ${message}`, {
-          position: "top-center",
-          autoClose: 5000,
-        });
+      if (!appwriteUser) {
+        return null;
       }
 
-      throw error;
+      // Получаем профиль пользователя из базы данных
+      const userProfile = await databases.getDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        appwriteUser.$id
+      );
+
+      const user = userProfile as unknown as User;
+
+      // Проверяем активацию аккаунта
+      if (!user.isActive) {
+        return {
+          notActivated: true,
+          message: "Ваш аккаунт еще не активирован администратором",
+        };
+      }
+
+      return user;
+    } catch (error: any) {
+      // Если ошибка 401 - пользователь не авторизован
+      if (error.code === 401) {
+        return null;
+      }
+      console.error("Ошибка при получении текущего пользователя:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
     }
-  };
+  },
 
-  const clearError = () => {
-    // Можно добавить логику очистки ошибок если нужно
-  };
+  // Авторизация
+  login: async ({ email, password }: LoginCredentials): Promise<User> => {
+    try {
+      // Создаем сессию в Appwrite
+      await account.createEmailPasswordSession(email, password);
 
-  // Показываем toast при ошибках аутентификации
-  useEffect(() => {
-    if (authError) {
-      toast.error("🔐 Ошибка аутентификации. Пожалуйста, войдите заново", {
-        position: "top-center",
-        autoClose: 5000,
-      });
+      // Получаем профиль пользователя
+      const currentUser = await authApi.getCurrentUser();
+
+      if (!currentUser) {
+        throw new Error("Не удалось получить данные пользователя после входа");
+      }
+
+      if ("notActivated" in currentUser) {
+        // Завершаем сессию при неактивированном аккаунте
+        await account.deleteSession("current");
+        throw new Error(currentUser.message);
+      }
+
+      return currentUser;
+    } catch (error: any) {
+      console.error("Ошибка при входе:", error);
+
+      // Более понятные сообщения об ошибках
+      if (error.code === 401) {
+        throw new Error("Неверный email или пароль");
+      }
+
+      if (error.message?.includes("не активирован")) {
+        throw new Error(error.message);
+      }
+
+      throw appwriteHelpers.handleAppwriteError(error);
     }
-  }, [authError]);
+  },
 
-  // Проверки ролей для удобства
-  const isSuper = user?.role === UserRole.SUPER_ADMIN;
-  const isManager = user?.role === UserRole.MANAGER;
-  const isTechnician = user?.role === UserRole.TECHNICIAN;
-  const isRequester = user?.role === UserRole.REQUESTER;
+  // Выход из системы
+  logout: async (): Promise<void> => {
+    try {
+      await account.deleteSession("current");
+    } catch (error: any) {
+      console.error("Ошибка при выходе:", error);
+      // При ошибке выхода не блокируем очистку локального состояния
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
 
-  // Проверки прав доступа
-  const canManageUsers = isSuper || isManager;
-  const canManageRequests = isSuper || isManager;
-  const canAssignTechnicians = isSuper || isManager;
-  const canViewAllRequests = isSuper || isManager;
-  const canCreateRequests = isSuper || isManager || isRequester;
-  const canUpdateRequestStatus = isSuper || isManager || isTechnician;
+  // Регистрация
+  register: async (
+    data: RegisterData
+  ): Promise<{ user: User; isFirstUser: boolean }> => {
+    try {
+      const { name, email, password, role, specialization, phone } = data;
+
+      // Проверяем, первый ли это пользователь
+      const adminCheck = await databases.listDocuments(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        [Query.equal("role", UserRole.SUPER_ADMIN)]
+      );
+
+      const isFirstUser = adminCheck.total === 0;
+      const finalRole = isFirstUser ? UserRole.SUPER_ADMIN : role;
+      const isAutoActivated = isFirstUser;
+
+      // Создаем аккаунт в Appwrite Auth
+      const appwriteUser = await account.create(
+        ID.unique(),
+        email,
+        password,
+        name
+      );
+
+      // Создаем профиль пользователя в базе данных
+      const userProfile = await databases.createDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        appwriteUser.$id,
+        {
+          name,
+          email,
+          role: finalRole,
+          isActive: isAutoActivated,
+          specialization: specialization || null,
+          phone: phone || null,
+          createdAt: new Date().toISOString(),
+        }
+      );
+
+      const user = userProfile as unknown as User;
+
+      // Если первый пользователь, сразу создаем сессию
+      if (isFirstUser) {
+        await account.createEmailPasswordSession(email, password);
+      }
+
+      return { user, isFirstUser };
+    } catch (error: any) {
+      console.error("Ошибка при регистрации:", error);
+
+      // Более понятные сообщения об ошибках
+      if (error.code === 409) {
+        throw new Error("Пользователь с таким email уже существует");
+      }
+
+      if (error.message?.includes("Password")) {
+        throw new Error("Пароль должен содержать минимум 8 символов");
+      }
+
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Получить всех пользователей (только для админов)
+  getAllUsers: async (): Promise<User[]> => {
+    try {
+      const response = await databases.listDocuments(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        [Query.orderDesc("$createdAt")]
+      );
+
+      return response.documents as unknown as User[];
+    } catch (error: any) {
+      console.error("Ошибка при получении пользователей:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Получить неактивных пользователей
+  getPendingUsers: async (): Promise<User[]> => {
+    try {
+      const response = await databases.listDocuments(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        [Query.equal("isActive", false), Query.orderDesc("$createdAt")]
+      );
+
+      return response.documents as unknown as User[];
+    } catch (error: any) {
+      console.error("Ошибка при получении неактивных пользователей:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Получить активных техников
+  getActiveTechnicians: async (): Promise<User[]> => {
+    try {
+      const response = await databases.listDocuments(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        [
+          Query.equal("role", UserRole.TECHNICIAN),
+          Query.equal("isActive", true),
+          Query.orderAsc("name"),
+        ]
+      );
+
+      return response.documents as unknown as User[];
+    } catch (error: any) {
+      console.error("Ошибка при получении техников:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Активировать пользователя
+  activateUser: async (userId: string): Promise<User> => {
+    try {
+      const response = await databases.updateDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        userId,
+        { isActive: true }
+      );
+
+      return response as unknown as User;
+    } catch (error: any) {
+      console.error("Ошибка при активации пользователя:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Деактивировать пользователя
+  deactivateUser: async (userId: string): Promise<User> => {
+    try {
+      const response = await databases.updateDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        userId,
+        { isActive: false }
+      );
+
+      return response as unknown as User;
+    } catch (error: any) {
+      console.error("Ошибка при деактивации пользователя:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Создать пользователя (для админов)
+  createUser: async (data: RegisterData): Promise<User> => {
+    try {
+      const { name, email, password, role, specialization, phone } = data;
+
+      // Создаем аккаунт в Appwrite Auth
+      const appwriteUser = await account.create(
+        ID.unique(),
+        email,
+        password,
+        name
+      );
+
+      // Создаем профиль пользователя в базе данных
+      const userProfile = await databases.createDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        appwriteUser.$id,
+        {
+          name,
+          email,
+          role,
+          isActive: true, // Пользователи, созданные админом, сразу активны
+          specialization: specialization || null,
+          phone: phone || null,
+          createdAt: new Date().toISOString(),
+        }
+      );
+
+      return userProfile as unknown as User;
+    } catch (error: any) {
+      console.error("Ошибка при создании пользователя:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Обновить профиль пользователя
+  updateUserProfile: async (
+    userId: string,
+    updates: Partial<User>
+  ): Promise<User> => {
+    try {
+      const response = await databases.updateDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        userId,
+        updates
+      );
+
+      return response as unknown as User;
+    } catch (error: any) {
+      console.error("Ошибка при обновлении профиля:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+
+  // Удалить пользователя
+  deleteUser: async (userId: string): Promise<void> => {
+    try {
+      // Удаляем профиль из базы данных
+      await databases.deleteDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.users,
+        userId
+      );
+
+      // TODO: Удаление аккаунта из Appwrite Auth требует серверной части
+      // На данный момент только деактивируем профиль
+    } catch (error: any) {
+      console.error("Ошибка при удалении пользователя:", error);
+      throw appwriteHelpers.handleAppwriteError(error);
+    }
+  },
+};
+
+// React Query ключи
+export const authKeys = {
+  all: ["auth"] as const,
+  currentUser: () => [...authKeys.all, "current"] as const,
+  users: () => [...authKeys.all, "users"] as const,
+  pendingUsers: () => [...authKeys.all, "pending"] as const,
+  technicians: () => [...authKeys.all, "technicians"] as const,
+  user: (id: string) => [...authKeys.users(), id] as const,
+};
+
+// React Query хуки
+
+// Получение текущего пользователя
+export const useCurrentUser = () => {
+  return useQuery({
+    queryKey: authKeys.currentUser(),
+    queryFn: authApi.getCurrentUser,
+    staleTime: 1000 * 60 * 5, // 5 минут
+    retry: (failureCount, error: any) => {
+      // Не повторяем запрос при 401 ошибке
+      if (error?.code === 401) return false;
+      return failureCount < 2;
+    },
+  });
+};
+
+// Авторизация
+export const useLogin = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.login,
+    onSuccess: (user) => {
+      // Обновляем кеш текущего пользователя
+      queryClient.setQueryData(authKeys.currentUser(), user);
+      // Инвалидируем связанные запросы
+      queryClient.invalidateQueries({ queryKey: authKeys.all });
+    },
+    onError: () => {
+      // Очищаем кеш при ошибке
+      queryClient.setQueryData(authKeys.currentUser(), null);
+    },
+  });
+};
+
+// Выход из системы
+export const useLogout = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.logout,
+    onSuccess: () => {
+      // Очищаем весь кеш пользователя
+      queryClient.setQueryData(authKeys.currentUser(), null);
+      queryClient.removeQueries({ queryKey: authKeys.all });
+      // Сбрасываем кеш всех данных
+      queryClient.clear();
+    },
+    onError: () => {
+      // Очищаем кеш даже при ошибке (пользователь хочет выйти)
+      queryClient.setQueryData(authKeys.currentUser(), null);
+      queryClient.removeQueries({ queryKey: authKeys.all });
+    },
+  });
+};
+
+// Регистрация
+export const useRegister = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.register,
+    onSuccess: (result) => {
+      // Если первый пользователь, обновляем кеш
+      if (result.isFirstUser) {
+        queryClient.setQueryData(authKeys.currentUser(), result.user);
+      }
+      // Инвалидируем списки пользователей
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.pendingUsers() });
+    },
+  });
+};
+
+// Получение всех пользователей
+export const useAllUsers = () => {
+  return useQuery({
+    queryKey: authKeys.users(),
+    queryFn: authApi.getAllUsers,
+    staleTime: 1000 * 60 * 2, // 2 минуты
+  });
+};
+
+// Получение неактивных пользователей
+export const usePendingUsers = () => {
+  return useQuery({
+    queryKey: authKeys.pendingUsers(),
+    queryFn: authApi.getPendingUsers,
+    staleTime: 1000 * 60 * 1, // 1 минута
+  });
+};
+
+// Получение активных техников
+export const useActiveTechnicians = () => {
+  return useQuery({
+    queryKey: authKeys.technicians(),
+    queryFn: authApi.getActiveTechnicians,
+    staleTime: 1000 * 60 * 5, // 5 минут
+  });
+};
+
+// Активация пользователя
+export const useActivateUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.activateUser,
+    onSuccess: () => {
+      // Инвалидируем списки пользователей
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.pendingUsers() });
+      queryClient.invalidateQueries({ queryKey: authKeys.technicians() });
+    },
+  });
+};
+
+// Деактивация пользователя
+export const useDeactivateUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.deactivateUser,
+    onSuccess: () => {
+      // Инвалидируем списки пользователей
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.pendingUsers() });
+      queryClient.invalidateQueries({ queryKey: authKeys.technicians() });
+    },
+  });
+};
+
+// Создание пользователя
+export const useCreateUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.createUser,
+    onSuccess: () => {
+      // Инвалидируем списки пользователей
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.technicians() });
+    },
+  });
+};
+
+// Обновление профиля пользователя
+export const useUpdateUserProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      updates,
+    }: {
+      userId: string;
+      updates: Partial<User>;
+    }) => authApi.updateUserProfile(userId, updates),
+    onSuccess: (updatedUser) => {
+      // Обновляем кеш конкретного пользователя
+      queryClient.setQueryData(authKeys.user(updatedUser.$id), updatedUser);
+
+      // Если это текущий пользователь, обновляем его тоже
+      const currentUser = queryClient.getQueryData(
+        authKeys.currentUser()
+      ) as User | null;
+      if (currentUser && currentUser.$id === updatedUser.$id) {
+        queryClient.setQueryData(authKeys.currentUser(), updatedUser);
+      }
+
+      // Инвалидируем списки
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.technicians() });
+    },
+  });
+};
+
+// Удаление пользователя
+export const useDeleteUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: authApi.deleteUser,
+    onSuccess: () => {
+      // Инвалидируем все списки пользователей
+      queryClient.invalidateQueries({ queryKey: authKeys.users() });
+      queryClient.invalidateQueries({ queryKey: authKeys.pendingUsers() });
+      queryClient.invalidateQueries({ queryKey: authKeys.technicians() });
+    },
+  });
+};
+
+// Проверка прав доступа (хуки)
+
+export const usePermissions = () => {
+  const { data: user } = useCurrentUser();
+
+  // Приводим к типу User, если пользователь существует
+  const activatedUser = user as User | null;
 
   return {
-    // Состояние
-    user,
-    loading:
-      isCheckingAuth ||
-      loginMutation.isPending ||
-      logoutMutation.isPending ||
-      registerMutation.isPending,
-    error:
-      authError?.message ||
-      loginMutation.error?.message ||
-      logoutMutation.error?.message ||
-      registerMutation.error?.message ||
-      null,
-
-    // Действия
-    login,
-    logout,
-    register,
-    clearError,
-
-    // Статусы мутаций
-    isLoggingIn: loginMutation.isPending,
-    isLoggingOut: logoutMutation.isPending,
-    isRegistering: registerMutation.isPending,
-
-    // Проверки ролей
-    isSuper,
-    isManager,
-    isTechnician,
-    isRequester,
-
-    // Проверки прав доступа
-    canManageUsers,
-    canManageRequests,
-    canAssignTechnicians,
-    canViewAllRequests,
-    canCreateRequests,
-    canUpdateRequestStatus,
+    canManageUsers:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER,
+    canManageRequests:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER,
+    canAssignTechnicians:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER,
+    canViewAllRequests:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER,
+    canCreateRequests:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER ||
+      activatedUser?.role === UserRole.REQUESTER,
+    canUpdateRequestStatus:
+      activatedUser?.role === UserRole.SUPER_ADMIN ||
+      activatedUser?.role === UserRole.MANAGER ||
+      activatedUser?.role === UserRole.TECHNICIAN,
+    isSuper: activatedUser?.role === UserRole.SUPER_ADMIN,
+    isManager: activatedUser?.role === UserRole.MANAGER,
+    isTechnician: activatedUser?.role === UserRole.TECHNICIAN,
+    isRequester: activatedUser?.role === UserRole.REQUESTER,
   };
-}
+};

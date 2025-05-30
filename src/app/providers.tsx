@@ -1,7 +1,7 @@
 // app/providers.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AxiosError } from "axios";
@@ -29,12 +29,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  // Состояние для отслеживания монтирования на клиенте
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   useSyncAuthCookie();
 
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      {process.env.NODE_ENV === "development" && <ReactQueryDevtools />}
+      {/* Рендерим devtools только на клиенте в dev режиме */}
+      {isClient && process.env.NODE_ENV === "development" && (
+        <ReactQueryDevtools />
+      )}
       <ClientOnlyToastContainer />
     </QueryClientProvider>
   );

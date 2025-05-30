@@ -5,10 +5,10 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { UserRole } from "@/types";
 import Layout from "@/components/common/Layout";
 import { toast } from "react-toastify";
 import { CheckCircle, Clock, AlertTriangle, Info } from "lucide-react";
+import { UserRole } from "@/types";
 
 // Компонент для обработки URL параметров
 function LoginNotifications() {
@@ -114,20 +114,20 @@ function LoginForm() {
     }
   };
 
-  // Функция перенаправления на основе роли пользователя
+  // Функция перенаправления на основе роли пользователя (обновлена под систему техобслуживания)
   const redirectByRole = (role: UserRole) => {
     switch (role) {
       case UserRole.SUPER_ADMIN:
         router.push("/super-admin");
         break;
-      case UserRole.ACADEMIC_ADVISOR:
-        router.push("/academic-advisor");
+      case UserRole.MANAGER:
+        router.push("/manager");
         break;
-      case UserRole.TEACHER:
-        router.push("/teacher");
+      case UserRole.TECHNICIAN:
+        router.push("/technician");
         break;
-      case UserRole.STUDENT:
-        router.push("/student");
+      case UserRole.REQUESTER:
+        router.push("/requester");
         break;
       default:
         router.push("/");
@@ -142,7 +142,7 @@ function LoginForm() {
             Вход в систему
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Войдите в свой аккаунт для доступа к платформе
+            Система управления техническим обслуживанием
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -239,6 +239,39 @@ function LoginForm() {
               Если ваш аккаунт не активирован, обратитесь к администратору
               системы
             </p>
+          </div>
+
+          {/* Информация о ролях системы */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-md">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              Роли в системе:
+            </h3>
+            <div className="text-xs text-gray-600 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span>
+                <span>
+                  <strong>Супер админ</strong> - полный доступ к системе
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span>
+                  <strong>Менеджер</strong> - управление заявками и персоналом
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                <span>
+                  <strong>Техник</strong> - выполнение работ по заявкам
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 bg-purple-500 rounded-full"></span>
+                <span>
+                  <strong>Заявитель</strong> - создание заявок на обслуживание
+                </span>
+              </div>
+            </div>
           </div>
         </form>
       </div>

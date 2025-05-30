@@ -1,10 +1,11 @@
+// app/layout.tsx
 import "./globals.css";
 import { Providers } from "./providers";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BAMORA",
-  description: "Платформа для управления академической деятельностью",
+  description: "Платформа подачи заявок на ремонт и обслуживание помещений",
 };
 
 export default function RootLayout({
@@ -13,8 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru">
-      <body>
+    <html lang="ru" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

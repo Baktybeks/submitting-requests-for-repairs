@@ -4,30 +4,29 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  useAllUsers, 
-  usePendingUsers, 
-  useActivateUser, 
+import {
+  useAllUsers,
+  usePendingUsers,
+  useActivateUser,
   useDeactivateUser,
-  useCreateUser 
+  useCreateUser,
 } from "@/services/authService";
 import { useRequests } from "@/services/maintenanceService";
-import { RequestsList } from "@/components/requests/RequestsList";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
-import { 
-  User, 
-  UserRole, 
-  getRoleLabel, 
+import {
+  User,
+  UserRole,
+  getRoleLabel,
   getRoleColor,
-  MaintenanceRequest 
+  MaintenanceRequest,
 } from "@/types";
 import { formatLocalDateTime } from "@/utils/dateUtils";
 import { toast } from "react-toastify";
-import { 
-  Shield, 
-  Users, 
-  ClipboardList, 
-  BarChart3, 
+import {
+  Shield,
+  Users,
+  ClipboardList,
+  BarChart3,
   Settings,
   UserCheck,
   UserX,
@@ -36,17 +35,25 @@ import {
   CheckCircle,
   Clock,
   Eye,
-  Filter
+  Filter,
 } from "lucide-react";
+import { RequestsList } from "@/components/requests/RequestsList";
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "requests" | "pending" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "users" | "requests" | "pending" | "settings"
+  >("dashboard");
 
-  const { data: allUsers = [], isLoading: usersLoading, refetch: refetchUsers } = useAllUsers();
-  const { data: pendingUsers = [], isLoading: pendingLoading } = usePendingUsers();
+  const {
+    data: allUsers = [],
+    isLoading: usersLoading,
+    refetch: refetchUsers,
+  } = useAllUsers();
+  const { data: pendingUsers = [], isLoading: pendingLoading } =
+    usePendingUsers();
   const { data: allRequests = [], isLoading: requestsLoading } = useRequests();
-  
+
   const activateUserMutation = useActivateUser();
   const deactivateUserMutation = useDeactivateUser();
 
@@ -74,7 +81,11 @@ export default function AdminPage() {
   };
 
   const handleDeactivateUser = async (userId: string, userName: string) => {
-    if (!confirm(`Вы уверены, что хотите деактивировать пользователя ${userName}?`)) {
+    if (
+      !confirm(
+        `Вы уверены, что хотите деактивировать пользователя ${userName}?`
+      )
+    ) {
       return;
     }
 
@@ -100,15 +111,22 @@ export default function AdminPage() {
   // Статистика системы
   const systemStats = {
     totalUsers: allUsers.length,
-    activeUsers: allUsers.filter(u => u.isActive).length,
+    activeUsers: allUsers.filter((u) => u.isActive).length,
     pendingUsers: pendingUsers.length,
     totalRequests: allRequests.length,
     usersByRole: {
-      [UserRole.SUPER_ADMIN]: allUsers.filter(u => u.role === UserRole.SUPER_ADMIN).length,
-      [UserRole.MANAGER]: allUsers.filter(u => u.role === UserRole.MANAGER).length,
-      [UserRole.TECHNICIAN]: allUsers.filter(u => u.role === UserRole.TECHNICIAN).length,
-      [UserRole.REQUESTER]: allUsers.filter(u => u.role === UserRole.REQUESTER).length,
-    }
+      [UserRole.SUPER_ADMIN]: allUsers.filter(
+        (u) => u.role === UserRole.SUPER_ADMIN
+      ).length,
+      [UserRole.MANAGER]: allUsers.filter((u) => u.role === UserRole.MANAGER)
+        .length,
+      [UserRole.TECHNICIAN]: allUsers.filter(
+        (u) => u.role === UserRole.TECHNICIAN
+      ).length,
+      [UserRole.REQUESTER]: allUsers.filter(
+        (u) => u.role === UserRole.REQUESTER
+      ).length,
+    },
   };
 
   return (
@@ -144,19 +162,27 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{systemStats.totalUsers}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {systemStats.totalUsers}
+              </div>
               <div className="text-sm text-gray-600">Всего пользователей</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{systemStats.activeUsers}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {systemStats.activeUsers}
+              </div>
               <div className="text-sm text-gray-600">Активных</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">{systemStats.pendingUsers}</div>
+              <div className="text-2xl font-bold text-yellow-600">
+                {systemStats.pendingUsers}
+              </div>
               <div className="text-sm text-gray-600">Ожидают активации</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{systemStats.totalRequests}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {systemStats.totalRequests}
+              </div>
               <div className="text-sm text-gray-600">Всего заявок</div>
             </div>
           </div>
@@ -243,15 +269,26 @@ export default function AdminPage() {
                 Распределение пользователей по ролям
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Object.entries(systemStats.usersByRole).map(([role, count]) => (
-                  <div key={role} className="bg-white p-4 rounded-lg shadow border">
-                    <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-2 ${getRoleColor(role as UserRole)}`}>
-                      {getRoleLabel(role as UserRole)}
+                {Object.entries(systemStats.usersByRole).map(
+                  ([role, count]) => (
+                    <div
+                      key={role}
+                      className="bg-white p-4 rounded-lg shadow border"
+                    >
+                      <div
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mb-2 ${getRoleColor(
+                          role as UserRole
+                        )}`}
+                      >
+                        {getRoleLabel(role as UserRole)}
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900">
+                        {count}
+                      </div>
+                      <div className="text-sm text-gray-500">пользователей</div>
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">{count}</div>
-                    <div className="text-sm text-gray-500">пользователей</div>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             </div>
           </div>
@@ -263,7 +300,9 @@ export default function AdminPage() {
             isLoading={usersLoading}
             onActivate={handleActivateUser}
             onDeactivate={handleDeactivateUser}
-            isUpdating={activateUserMutation.isPending || deactivateUserMutation.isPending}
+            isUpdating={
+              activateUserMutation.isPending || deactivateUserMutation.isPending
+            }
           />
         )}
 
@@ -283,9 +322,7 @@ export default function AdminPage() {
           />
         )}
 
-        {activeTab === "settings" && (
-          <SystemSettings />
-        )}
+        {activeTab === "settings" && <SystemSettings />}
       </div>
     </div>
   );
@@ -300,7 +337,13 @@ interface UsersListProps {
   isUpdating: boolean;
 }
 
-function UsersList({ users, isLoading, onActivate, onDeactivate, isUpdating }: UsersListProps) {
+function UsersList({
+  users,
+  isLoading,
+  onActivate,
+  onDeactivate,
+  isUpdating,
+}: UsersListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -334,19 +377,33 @@ function UsersList({ users, isLoading, onActivate, onDeactivate, isUpdating }: U
                   </div>
                   <div className="ml-4">
                     <div className="flex items-center">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                      <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
+                      <div className="text-sm font-medium text-gray-900">
+                        {user.name}
+                      </div>
+                      <span
+                        className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
+                          user.role
+                        )}`}
+                      >
                         {getRoleLabel(user.role)}
                       </span>
                       {user.isActive ? (
-                        <CheckCircle className="ml-2 h-4 w-4 text-green-500" title="Активен" />
+                        <CheckCircle
+                          className="ml-2 h-4 w-4 text-green-500"
+                          title="Активен"
+                        />
                       ) : (
-                        <Clock className="ml-2 h-4 w-4 text-yellow-500" title="Неактивен" />
+                        <Clock
+                          className="ml-2 h-4 w-4 text-yellow-500"
+                          title="Неактивен"
+                        />
                       )}
                     </div>
                     <div className="text-sm text-gray-500">{user.email}</div>
                     {user.specialization && (
-                      <div className="text-xs text-indigo-600">{user.specialization}</div>
+                      <div className="text-xs text-indigo-600">
+                        {user.specialization}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -395,7 +452,12 @@ interface PendingUsersListProps {
   isUpdating: boolean;
 }
 
-function PendingUsersList({ users, isLoading, onActivate, isUpdating }: PendingUsersListProps) {
+function PendingUsersList({
+  users,
+  isLoading,
+  onActivate,
+  isUpdating,
+}: PendingUsersListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -444,14 +506,22 @@ function PendingUsersList({ users, isLoading, onActivate, isUpdating }: PendingU
                     </div>
                     <div className="ml-4">
                       <div className="flex items-center">
-                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                        <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
+                        <div className="text-sm font-medium text-gray-900">
+                          {user.name}
+                        </div>
+                        <span
+                          className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
+                            user.role
+                          )}`}
+                        >
                           {getRoleLabel(user.role)}
                         </span>
                       </div>
                       <div className="text-sm text-gray-500">{user.email}</div>
                       {user.specialization && (
-                        <div className="text-xs text-indigo-600">{user.specialization}</div>
+                        <div className="text-xs text-indigo-600">
+                          {user.specialization}
+                        </div>
                       )}
                       <div className="text-xs text-gray-400 mt-1">
                         Зарегистрирован: {formatLocalDateTime(user.$createdAt)}
@@ -502,18 +572,26 @@ function SystemSettings() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-gray-900">Автоматическое назначение</h4>
-                <p className="text-sm text-gray-500">Автоматически назначать заявки доступным техникам</p>
+                <h4 className="text-sm font-medium text-gray-900">
+                  Автоматическое назначение
+                </h4>
+                <p className="text-sm text-gray-500">
+                  Автоматически назначать заявки доступным техникам
+                </p>
               </div>
               <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
                 <span className="translate-x-0 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
               </button>
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-gray-900">Email уведомления</h4>
-                <p className="text-sm text-gray-500">Отправлять уведомления на email при изменении статуса</p>
+                <h4 className="text-sm font-medium text-gray-900">
+                  Email уведомления
+                </h4>
+                <p className="text-sm text-gray-500">
+                  Отправлять уведомления на email при изменении статуса
+                </p>
               </div>
               <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
                 <span className="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
@@ -534,7 +612,9 @@ function SystemSettings() {
             </div>
             <div>
               <span className="text-gray-500">Последнее обновление:</span>
-              <span className="ml-2 font-medium">{new Date().toLocaleDateString("ru-RU")}</span>
+              <span className="ml-2 font-medium">
+                {new Date().toLocaleDateString("ru-RU")}
+              </span>
             </div>
             <div>
               <span className="text-gray-500">База данных:</span>
@@ -557,7 +637,7 @@ function SystemSettings() {
               <UserPlus className="h-4 w-4 mr-2" />
               Создать пользователя
             </button>
-            
+
             <button className="w-full sm:w-auto inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ml-0 sm:ml-3">
               <Settings className="h-4 w-4 mr-2" />
               Экспорт данных
@@ -570,12 +650,11 @@ function SystemSettings() {
           <div className="flex">
             <AlertTriangle className="h-5 w-5 text-yellow-400 mt-0.5" />
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                Внимание
-              </h3>
+              <h3 className="text-sm font-medium text-yellow-800">Внимание</h3>
               <p className="mt-1 text-sm text-yellow-700">
-                Изменения в настройках системы могут повлиять на работу всех пользователей. 
-                Убедитесь в правильности настроек перед сохранением.
+                Изменения в настройках системы могут повлиять на работу всех
+                пользователей. Убедитесь в правильности настроек перед
+                сохранением.
               </p>
             </div>
           </div>
@@ -583,4 +662,4 @@ function SystemSettings() {
       </div>
     </div>
   );
-})
+}
