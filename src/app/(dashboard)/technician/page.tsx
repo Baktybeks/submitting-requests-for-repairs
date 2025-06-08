@@ -4,7 +4,11 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useRequests, useUpdateRequest } from "@/services/maintenanceService";
+import {
+  useRequests,
+  useUpdateRequest,
+  useRejectRequestByTechnician,
+} from "@/services/maintenanceService";
 import { RequestsList } from "@/components/requests/RequestsList";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import {
@@ -13,7 +17,10 @@ import {
   getStatusLabel,
   getStatusColor,
   getPriorityLabel,
+  getPriorityColor,
+  getCategoryLabel,
 } from "@/types";
+import { formatLocalDateTime } from "@/utils/dateUtils";
 import { toast } from "react-toastify";
 import {
   Wrench,
@@ -28,6 +35,9 @@ import {
   Pause,
   MapPin,
   Square,
+  UserCheck,
+  UserX,
+  CheckSquare,
 } from "lucide-react";
 
 export default function TechnicianPage() {
@@ -36,6 +46,7 @@ export default function TechnicianPage() {
     "dashboard" | "assigned" | "all" | "profile"
   >("dashboard");
   const updateRequestMutation = useUpdateRequest();
+  const rejectRequestMutation = useRejectRequestByTechnician();
 
   // Получаем заявки для техника
   const { data: assignedRequests = [], isLoading: assignedLoading } =
@@ -98,6 +109,37 @@ export default function TechnicianPage() {
     }
   };
 
+  // Функция для отказа от заявки
+  const handleRejectRequest = async (request: MaintenanceRequest) => {
+    if (
+      !confirm(
+        `Вы уверены, что хотите отказаться от заявки "${request.title}"?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await rejectRequestMutation.mutateAsync({
+        requestId: request.$id,
+        technicianId: user.$id,
+      });
+
+      toast.success(
+        `✅ Вы отказались от заявки "${request.title}". Заявка будет переназначена.`,
+        {
+          position: "top-right",
+          autoClose: 4000,
+        }
+      );
+    } catch (error: any) {
+      toast.error(`❌ Ошибка при отказе от заявки: ${error.message}`, {
+        position: "top-center",
+        autoClose: 5000,
+      });
+    }
+  };
+
   const handleRequestClick = (request: MaintenanceRequest) => {
     // TODO: Открыть модальное окно с деталями заявки
     console.log("Открыть заявку:", request);
@@ -106,18 +148,18 @@ export default function TechnicianPage() {
   // Статистика для назначенных заявок
   const assignedStats = {
     total: assignedRequests.length,
-    new: assignedRequests.filter((r) => r.status === RequestStatus.NEW).length,
+    awaitingAcceptance: assignedRequests.filter(
+      (r) =>
+        r.status === RequestStatus.NEW && r.assignedTechnicianId === user.$id
+    ).length,
     inProgress: assignedRequests.filter(
       (r) => r.status === RequestStatus.IN_PROGRESS
     ).length,
     completed: assignedRequests.filter(
       (r) => r.status === RequestStatus.COMPLETED
     ).length,
-    awaitingAcceptance: assignedRequests.filter(
-      (r) =>
-        r.status === RequestStatus.NEW && r.assignedTechnicianId === user.$id
-    ).length, // ← Добавить
   };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Заголовок */}
@@ -153,7 +195,7 @@ export default function TechnicianPage() {
       {/* Быстрая статистика */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-900">
                 {assignedStats.total}
@@ -165,18 +207,6 @@ export default function TechnicianPage() {
                 {assignedStats.awaitingAcceptance}
               </div>
               <div className="text-sm text-gray-600">Ожидают принятия</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {assignedStats.total}
-              </div>
-              <div className="text-sm text-gray-600">Всего назначено</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">
-                {assignedStats.new}
-              </div>
-              <div className="text-sm text-gray-600">Новые</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
@@ -219,6 +249,11 @@ export default function TechnicianPage() {
             >
               <ClipboardList className="inline h-4 w-4 mr-2" />
               Мои заявки ({assignedStats.total})
+              {assignedStats.awaitingAcceptance > 0 && (
+                <span className="ml-1 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center inline-flex">
+                  {assignedStats.awaitingAcceptance}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab("all")}
@@ -274,6 +309,14 @@ export default function TechnicianPage() {
                   <h2 className="text-xl font-semibold text-gray-900">
                     Назначенные мне заявки
                   </h2>
+                  {assignedStats.awaitingAcceptance > 0 && (
+                    <div className="bg-orange-100 border border-orange-200 rounded-lg px-4 py-2">
+                      <span className="text-orange-800 text-sm font-medium">
+                        {assignedStats.awaitingAcceptance} заявок ожидают вашего
+                        принятия
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {assignedRequests.length === 0 ? (
@@ -293,8 +336,12 @@ export default function TechnicianPage() {
                         key={request.$id}
                         request={request}
                         onStatusUpdate={handleStatusUpdate}
+                        onRejectRequest={handleRejectRequest}
                         onClick={() => handleRequestClick(request)}
-                        isUpdating={updateRequestMutation.isPending}
+                        isUpdating={
+                          updateRequestMutation.isPending ||
+                          rejectRequestMutation.isPending
+                        }
                       />
                     ))}
                   </div>
@@ -323,10 +370,11 @@ export default function TechnicianPage() {
   );
 }
 
-// Компонент карточки заявки для техника
+// Обновленный компонент карточки заявки для техника
 interface TechnicianRequestCardProps {
   request: MaintenanceRequest;
   onStatusUpdate: (request: MaintenanceRequest, status: RequestStatus) => void;
+  onRejectRequest: (request: MaintenanceRequest) => void;
   onClick?: () => void;
   isUpdating?: boolean;
 }
@@ -334,48 +382,53 @@ interface TechnicianRequestCardProps {
 function TechnicianRequestCard({
   request,
   onStatusUpdate,
+  onRejectRequest,
   onClick,
   isUpdating,
 }: TechnicianRequestCardProps) {
-  const getNextStatus = (
-    currentStatus: RequestStatus
-  ): RequestStatus | null => {
-    switch (currentStatus) {
-      case RequestStatus.NEW:
-        return RequestStatus.IN_PROGRESS;
-      case RequestStatus.IN_PROGRESS:
-        return RequestStatus.COMPLETED;
-      default:
-        return null;
-    }
-  };
-
-  const getStatusAction = (status: RequestStatus) => {
+  // Определяем возможные действия в зависимости от статуса
+  const getAvailableActions = (status: RequestStatus) => {
     switch (status) {
       case RequestStatus.NEW:
-        return {
-          label: "Начать работу",
-          icon: Play,
-          color: "bg-blue-600 hover:bg-blue-700",
-        };
+        return [
+          {
+            label: "Принять в работу",
+            icon: UserCheck,
+            color: "bg-green-600 hover:bg-green-700",
+            action: () => onStatusUpdate(request, RequestStatus.IN_PROGRESS),
+          },
+          {
+            label: "Отказаться",
+            icon: UserX,
+            color: "bg-red-600 hover:bg-red-700",
+            action: () => onRejectRequest(request),
+            variant: "secondary" as const,
+          },
+        ];
       case RequestStatus.IN_PROGRESS:
-        return {
-          label: "Завершить",
-          icon: CheckCircle,
-          color: "bg-green-600 hover:bg-green-700",
-        };
+        return [
+          {
+            label: "Завершить работу",
+            icon: CheckSquare,
+            color: "bg-blue-600 hover:bg-blue-700",
+            action: () => onStatusUpdate(request, RequestStatus.COMPLETED),
+          },
+        ];
       default:
-        return null;
+        return [];
     }
   };
 
-  const nextStatus = getNextStatus(request.status);
-  const statusAction = nextStatus ? getStatusAction(nextStatus) : null;
+  const actions = getAvailableActions(request.status);
 
   return (
     <div
       className={`bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow ${
         onClick ? "cursor-pointer" : ""
+      } ${
+        request.status === RequestStatus.NEW
+          ? "border-l-4 border-l-orange-500"
+          : ""
       }`}
       onClick={onClick}
     >
@@ -386,13 +439,22 @@ function TechnicianRequestCard({
             <h3 className="text-lg font-medium text-gray-900 truncate pr-4">
               {request.title}
             </h3>
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
-                request.status
-              )}`}
-            >
-              {getStatusLabel(request.status)}
-            </span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
+                  request.status
+                )}`}
+              >
+                {getStatusLabel(request.status)}
+              </span>
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(
+                  request.priority
+                )}`}
+              >
+                {getPriorityLabel(request.priority)}
+              </span>
+            </div>
           </div>
 
           {/* Описание */}
@@ -403,32 +465,57 @@ function TechnicianRequestCard({
           {/* Мета-информация */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-3">
             <div className="flex items-center">
+              <MapPin className="h-4 w-4 mr-1" />
+              {request.location}
+            </div>
+            <div className="flex items-center">
               <Clock className="h-4 w-4 mr-1" />
-              {new Date(request.$createdAt).toLocaleDateString("ru-RU")}
+              {formatLocalDateTime(request.$createdAt)}
             </div>
             <div className="flex items-center">
               <AlertTriangle className="h-4 w-4 mr-1" />
-              Приоритет: {request.priority}
+              {getCategoryLabel(request.category)}
             </div>
           </div>
 
-          {/* Кнопка действия */}
-          {statusAction && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStatusUpdate(request, nextStatus!);
-              }}
-              disabled={isUpdating}
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${statusAction.color}`}
-            >
-              {isUpdating ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              ) : (
-                <statusAction.icon className="h-4 w-4 mr-2" />
-              )}
-              {statusAction.label}
-            </button>
+          {/* Статус для NEW заявок */}
+          {request.status === RequestStatus.NEW && (
+            <div className="bg-orange-50 border border-orange-200 rounded-md p-3 mb-3">
+              <div className="flex items-center">
+                <Clock className="h-4 w-4 text-orange-600 mr-2" />
+                <span className="text-sm text-orange-800 font-medium">
+                  Заявка ожидает вашего принятия в работу
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Кнопки действий */}
+          {actions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {actions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    action.action();
+                  }}
+                  disabled={isUpdating}
+                  className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    action.variant === "secondary"
+                      ? "bg-gray-600 hover:bg-gray-700"
+                      : action.color
+                  }`}
+                >
+                  {isUpdating ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <action.icon className="h-4 w-4 mr-2" />
+                  )}
+                  {action.label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -436,9 +523,9 @@ function TechnicianRequestCard({
   );
 }
 
-// Компонент профиля техника
+// Компонент профиля техника (без изменений)
 interface TechnicianProfileProps {
-  user: any; // TODO: заменить на правильный тип User
+  user: any;
 }
 
 function TechnicianProfile({ user }: TechnicianProfileProps) {
@@ -479,26 +566,7 @@ function TechnicianProfile({ user }: TechnicianProfileProps) {
           </div>
         </div>
 
-        {/* Контактная информация */}
-        <div className="border-t border-gray-200 pt-6">
-          <h4 className="text-sm font-medium text-gray-900 mb-4">
-            Контактная информация
-          </h4>
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <User className="h-5 w-5 text-gray-400 mr-3" />
-              <span className="text-sm text-gray-900">{user.email}</span>
-            </div>
-            {user.phone && (
-              <div className="flex items-center">
-                <span className="h-5 w-5 text-gray-400 mr-3">📞</span>
-                <span className="text-sm text-gray-900">{user.phone}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Рабочие инструкции */}
+        {/* Инструкции для техников */}
         <div className="border-t border-gray-200 pt-6">
           <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
             <h4 className="text-sm font-medium text-blue-800 mb-2">
@@ -506,11 +574,13 @@ function TechnicianProfile({ user }: TechnicianProfileProps) {
             </h4>
             <ul className="text-sm text-blue-700 space-y-1">
               <li>
-                • Проверяйте назначенные вам заявки во вкладке "Мои заявки"
+                • Новые назначенные заявки требуют вашего принятия в работу
               </li>
-              <li>• Обновляйте статус заявки по мере выполнения работ</li>
-              <li>• При начале работы переводите заявку в статус "В работе"</li>
-              <li>• После завершения работ отмечайте заявку как "Завершена"</li>
+              <li>
+                • Вы можете отказаться от заявки, если не можете её выполнить
+              </li>
+              <li>• После принятия переводите заявку в статус "В работе"</li>
+              <li>• По завершении работ отмечайте заявку как "Завершена"</li>
               <li>• Добавляйте комментарии о ходе выполнения работ</li>
             </ul>
           </div>
@@ -519,22 +589,29 @@ function TechnicianProfile({ user }: TechnicianProfileProps) {
         {/* Статусы заявок */}
         <div className="border-t border-gray-200 pt-6">
           <h4 className="text-sm font-medium text-gray-900 mb-4">
-            Статусы заявок
+            Рабочий процесс
           </h4>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+            <div className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-md">
               <div className="flex items-center">
-                <Clock className="h-5 w-5 text-yellow-600 mr-3" />
+                <Clock className="h-5 w-5 text-orange-600 mr-3" />
                 <div>
-                  <p className="text-sm font-medium text-yellow-800">Новая</p>
-                  <p className="text-xs text-yellow-600">
-                    Заявка назначена, но работа не начата
+                  <p className="text-sm font-medium text-orange-800">
+                    Новая (назначена)
+                  </p>
+                  <p className="text-xs text-orange-600">
+                    Требует принятия в работу или отказа
                   </p>
                 </div>
               </div>
-              <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md">
-                Начать работу
-              </button>
+              <div className="flex gap-2">
+                <button className="text-xs bg-green-600 text-white px-3 py-1 rounded-md">
+                  Принять
+                </button>
+                <button className="text-xs bg-red-600 text-white px-3 py-1 rounded-md">
+                  Отказаться
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
@@ -545,7 +622,7 @@ function TechnicianProfile({ user }: TechnicianProfileProps) {
                   <p className="text-xs text-blue-600">Работа выполняется</p>
                 </div>
               </div>
-              <button className="text-xs bg-green-600 text-white px-3 py-1 rounded-md">
+              <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md">
                 Завершить
               </button>
             </div>

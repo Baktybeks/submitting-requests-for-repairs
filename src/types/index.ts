@@ -115,8 +115,8 @@ export interface MaintenanceRequest extends BaseDocument {
   status: RequestStatus;
   location: string;
   requesterId: string;
-  assignedTechnicianId?: string;
-  managerId?: string;
+  assignedTechnicianId?: string | null; // Изменено: добавлен null
+  managerId?: string | null; // Изменено: добавлен null
   attachments?: string[]; // URLs файлов
   estimatedCompletionDate?: string;
   actualCompletionDate?: string;
@@ -159,8 +159,8 @@ export interface UpdateMaintenanceRequestDto {
   priority?: RequestPriority;
   location?: string;
   status?: RequestStatus;
-  assignedTechnicianId?: string;
-  managerId?: string; // Добавляем managerId
+  assignedTechnicianId?: string | null; // Изменено: добавлен null
+  managerId?: string | null; // Изменено: добавлен null
   estimatedCompletionDate?: string;
   actualCompletionDate?: string;
   notes?: string;
@@ -177,8 +177,8 @@ export interface CreateCommentDto {
 // Расширенная информация о заявке с данными пользователей
 export interface MaintenanceRequestWithDetails extends MaintenanceRequest {
   requester: User;
-  assignedTechnician?: User;
-  manager?: User;
+  assignedTechnician?: User | null; // Изменено: добавлен null
+  manager?: User | null;
   comments?: RequestComment[];
   history?: RequestHistory[];
 }
@@ -264,4 +264,175 @@ export const canUpdateRequestStatus = (userRole: UserRole): boolean => {
   return [UserRole.SUPER_ADMIN, UserRole.MANAGER, UserRole.TECHNICIAN].includes(
     userRole
   );
+};
+
+export enum RequestAction {
+  ACCEPT = "ACCEPT", // Принять заявку в работу
+  REJECT = "REJECT", // Отказаться от заявки
+  START = "START", // Начать работу (то же что ACCEPT)
+  COMPLETE = "COMPLETE", // Завершить работу
+  CLOSE = "CLOSE", // Закрыть заявку
+}
+
+export const RequestActionLabels: Record<RequestAction, string> = {
+  [RequestAction.ACCEPT]: "Принять в работу",
+  [RequestAction.REJECT]: "Отказаться",
+  [RequestAction.START]: "Начать работу",
+  [RequestAction.COMPLETE]: "Завершить работу",
+  [RequestAction.CLOSE]: "Закрыть заявку",
+};
+
+// Утилитарные функции для проверки возможных действий
+export const getAvailableActionsForTechnician = (
+  request: MaintenanceRequest,
+  technicianId: string
+): RequestAction[] => {
+  // Проверяем, что заявка назначена данному технику
+  if (request.assignedTechnicianId !== technicianId) {
+    return [];
+  }
+
+  switch (request.status) {
+    case RequestStatus.NEW:
+      return [RequestAction.ACCEPT, RequestAction.REJECT];
+    case RequestStatus.IN_PROGRESS:
+      return [RequestAction.COMPLETE];
+    default:
+      return [];
+  }
+};
+
+export const getAvailableActionsForManager = (
+  request: MaintenanceRequest
+): RequestAction[] => {
+  switch (request.status) {
+    case RequestStatus.NEW:
+      return []; // Менеджер назначает техников, но не меняет статус NEW заявок
+    case RequestStatus.IN_PROGRESS:
+      return [RequestAction.COMPLETE]; // Может завершить работу за техника
+    case RequestStatus.COMPLETED:
+      return [RequestAction.CLOSE]; // Может закрыть завершенную заявку
+    default:
+      return [];
+  }
+};
+
+export const getAvailableActionsForRequester = (
+  request: MaintenanceRequest,
+  requesterId: string
+): RequestAction[] => {
+  // Заявитель может только закрывать завершенные заявки
+  if (request.requesterId !== requesterId) {
+    return [];
+  }
+
+  switch (request.status) {
+    case RequestStatus.COMPLETED:
+      return [RequestAction.CLOSE];
+    default:
+      return [];
+  }
+};
+
+// Функция для получения следующего статуса по действию
+export const getNextStatusByAction = (
+  action: RequestAction,
+  currentStatus: RequestStatus
+): RequestStatus | null => {
+  switch (action) {
+    case RequestAction.ACCEPT:
+    case RequestAction.START:
+      return currentStatus === RequestStatus.NEW
+        ? RequestStatus.IN_PROGRESS
+        : null;
+
+    case RequestAction.COMPLETE:
+      return currentStatus === RequestStatus.IN_PROGRESS
+        ? RequestStatus.COMPLETED
+        : null;
+
+    case RequestAction.CLOSE:
+      return currentStatus === RequestStatus.COMPLETED
+        ? RequestStatus.CLOSED
+        : null;
+
+    case RequestAction.REJECT:
+      // При отказе статус остается NEW, но убирается назначение
+      return RequestStatus.NEW;
+
+    default:
+      return null;
+  }
+};
+
+// Функция для проверки, может ли пользователь выполнить действие
+export const canUserPerformAction = (
+  userRole: UserRole,
+  action: RequestAction,
+  request: MaintenanceRequest,
+  userId: string
+): boolean => {
+  switch (userRole) {
+    case UserRole.SUPER_ADMIN:
+      return true; // Супер админ может все
+
+    case UserRole.MANAGER:
+      const managerActions = getAvailableActionsForManager(request);
+      return managerActions.includes(action);
+
+    case UserRole.TECHNICIAN:
+      const technicianActions = getAvailableActionsForTechnician(
+        request,
+        userId
+      );
+      return technicianActions.includes(action);
+
+    case UserRole.REQUESTER:
+      const requesterActions = getAvailableActionsForRequester(request, userId);
+      return requesterActions.includes(action);
+
+    default:
+      return false;
+  }
+};
+
+// Дополнительные утилиты для UI
+export const getActionButtonStyle = (action: RequestAction): string => {
+  switch (action) {
+    case RequestAction.ACCEPT:
+    case RequestAction.START:
+      return "bg-green-600 hover:bg-green-700 text-white";
+
+    case RequestAction.REJECT:
+      return "bg-red-600 hover:bg-red-700 text-white";
+
+    case RequestAction.COMPLETE:
+      return "bg-blue-600 hover:bg-blue-700 text-white";
+
+    case RequestAction.CLOSE:
+      return "bg-gray-600 hover:bg-gray-700 text-white";
+
+    default:
+      return "bg-indigo-600 hover:bg-indigo-700 text-white";
+  }
+};
+
+export const getActionIcon = (action: RequestAction): string => {
+  switch (action) {
+    case RequestAction.ACCEPT:
+    case RequestAction.START:
+      return "UserCheck";
+
+    case RequestAction.REJECT:
+      return "UserX";
+
+    case RequestAction.COMPLETE:
+      return "CheckSquare";
+
+    case RequestAction.CLOSE:
+      return "X";
+
+    default:
+      return "Play";
+  }
 };

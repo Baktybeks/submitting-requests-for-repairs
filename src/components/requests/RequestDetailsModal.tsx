@@ -19,6 +19,13 @@ import {
   getCategoryLabel,
   getPriorityLabel,
   getPriorityColor,
+  getAvailableActionsForTechnician,
+  getAvailableActionsForManager,
+  getAvailableActionsForRequester,
+  canUserPerformAction,
+  RequestAction,
+  RequestActionLabels,
+  getActionButtonStyle,
 } from "@/types";
 import { formatLocalDateTime } from "@/utils/dateUtils";
 import { toast } from "react-toastify";

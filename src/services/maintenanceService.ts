@@ -79,7 +79,52 @@ export const maintenanceApi = {
       return [];
     }
   },
+  rejectRequestByTechnician: async (
+    requestId: string,
+    technicianId: string
+  ): Promise<MaintenanceRequest> => {
+    try {
+      // Получаем текущую заявку
+      const currentRequest = (await databases.getDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.maintenanceRequests,
+        requestId
+      )) as unknown as MaintenanceRequest;
 
+      // Проверяем, что заявка назначена именно этому технику
+      if (currentRequest.assignedTechnicianId !== technicianId) {
+        throw new Error(
+          "Вы не можете отказаться от заявки, которая вам не назначена"
+        );
+      }
+
+      // Убираем назначение и возвращаем статус в NEW
+      const response = await databases.updateDocument(
+        appwriteConfig.databaseId,
+        appwriteConfig.collections.maintenanceRequests,
+        requestId,
+        {
+          assignedTechnicianId: null, // Убираем назначение
+          status: RequestStatus.NEW, // Возвращаем в статус NEW
+        }
+      );
+
+      // Создаем запись в истории
+      await maintenanceApi.addHistoryEntry(
+        requestId,
+        technicianId,
+        "REJECT",
+        currentRequest.assignedTechnicianId || "",
+        "",
+        "Техник отказался от выполнения заявки"
+      );
+
+      return response as unknown as MaintenanceRequest;
+    } catch (error) {
+      console.error("Ошибка при отказе от заявки:", error);
+      throw error;
+    }
+  },
   // Получить заявку по ID с дополнительной информацией
   getRequestById: async (
     id: string
@@ -605,5 +650,26 @@ export const useDashboardStats = (filters?: {
     queryKey: maintenanceKeys.stats(filters),
     queryFn: () => maintenanceApi.getDashboardStats(filters),
     staleTime: 1000 * 60 * 10, // 10 минут
+  });
+};
+
+export const useRejectRequestByTechnician = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      requestId,
+      technicianId,
+    }: {
+      requestId: string;
+      technicianId: string;
+    }) => maintenanceApi.rejectRequestByTechnician(requestId, technicianId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: maintenanceKeys.request(variables.requestId),
+      });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.stats() });
+    },
   });
 };
