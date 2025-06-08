@@ -160,6 +160,7 @@ export interface UpdateMaintenanceRequestDto {
   location?: string;
   status?: RequestStatus;
   assignedTechnicianId?: string;
+  managerId?: string; // Добавляем managerId
   estimatedCompletionDate?: string;
   actualCompletionDate?: string;
   notes?: string;

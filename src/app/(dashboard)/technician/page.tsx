@@ -12,6 +12,7 @@ import {
   RequestStatus,
   getStatusLabel,
   getStatusColor,
+  getPriorityLabel,
 } from "@/types";
 import { toast } from "react-toastify";
 import {
@@ -25,6 +26,7 @@ import {
   AlertTriangle,
   Play,
   Pause,
+  MapPin,
   Square,
 } from "lucide-react";
 
@@ -58,7 +60,6 @@ export default function TechnicianPage() {
     try {
       const updates: any = { status: newStatus };
 
-      // Если завершаем заявку, устанавливаем дату завершения
       if (newStatus === RequestStatus.COMPLETED) {
         updates.actualCompletionDate = new Date().toISOString();
       }
@@ -69,13 +70,26 @@ export default function TechnicianPage() {
         userId: user.$id,
       });
 
-      toast.success(
-        `✅ Статус заявки изменен на "${getStatusLabel(newStatus)}"`,
-        {
+      // Показываем разные сообщения в зависимости от статуса
+      if (newStatus === RequestStatus.IN_PROGRESS) {
+        toast.success(`✅ Заявка "${request.title}" принята в работу`, {
           position: "top-right",
           autoClose: 3000,
-        }
-      );
+        });
+      } else if (newStatus === RequestStatus.COMPLETED) {
+        toast.success(`🎉 Заявка "${request.title}" успешно завершена!`, {
+          position: "top-right",
+          autoClose: 4000,
+        });
+      } else {
+        toast.success(
+          `✅ Статус заявки изменен на "${getStatusLabel(newStatus)}"`,
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+      }
     } catch (error: any) {
       toast.error(`❌ Ошибка при обновлении статуса: ${error.message}`, {
         position: "top-center",
@@ -99,8 +113,11 @@ export default function TechnicianPage() {
     completed: assignedRequests.filter(
       (r) => r.status === RequestStatus.COMPLETED
     ).length,
+    awaitingAcceptance: assignedRequests.filter(
+      (r) =>
+        r.status === RequestStatus.NEW && r.assignedTechnicianId === user.$id
+    ).length, // ← Добавить
   };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Заголовок */}
@@ -136,7 +153,19 @@ export default function TechnicianPage() {
       {/* Быстрая статистика */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900">
+                {assignedStats.total}
+              </div>
+              <div className="text-sm text-gray-600">Всего назначено</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {assignedStats.awaitingAcceptance}
+              </div>
+              <div className="text-sm text-gray-600">Ожидают принятия</div>
+            </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-900">
                 {assignedStats.total}

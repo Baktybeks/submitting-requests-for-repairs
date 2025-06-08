@@ -4,6 +4,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { CreateRequestForm } from "@/components/requests/CreateRequestForm";
 import { useRequests, useUpdateRequest } from "@/services/maintenanceService";
 import { useActiveTechnicians } from "@/services/authService";
 import { RequestsList } from "@/components/requests/RequestsList";
@@ -34,12 +35,13 @@ import {
   Edit,
   UserPlus,
   Filter,
+  Plus,
 } from "lucide-react";
 
 export default function ManagerPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "requests" | "assign" | "team" | "profile"
+    "dashboard" | "requests" | "assign" | "team" | "create" | "profile" // ← Добавить "create"
   >("dashboard");
   const [selectedRequest, setSelectedRequest] =
     useState<MaintenanceRequest | null>(null);
@@ -71,17 +73,19 @@ export default function ManagerPage() {
         id: request.$id,
         data: {
           assignedTechnicianId: technicianId,
-          managerId: user.$id,
-          status: RequestStatus.IN_PROGRESS,
+          managerId: user.$id, // Теперь это поле есть в типе
         },
         userId: user.$id,
       });
 
       const technician = technicians.find((t) => t.$id === technicianId);
-      toast.success(`✅ Заявка назначена технику ${technician?.name}`, {
-        position: "top-right",
-        autoClose: 3000,
-      });
+      toast.success(
+        `✅ Заявка назначена технику ${technician?.name}. Техник должен принять заявку в работу.`,
+        {
+          position: "top-right",
+          autoClose: 5000,
+        }
+      );
 
       setShowAssignModal(false);
       setSelectedRequest(null);
@@ -136,7 +140,6 @@ export default function ManagerPage() {
     setShowAssignModal(true);
   };
 
-  // Статистика заявок
   const requestStats = {
     total: allRequests.length,
     new: allRequests.filter((r) => r.status === RequestStatus.NEW).length,
@@ -146,6 +149,9 @@ export default function ManagerPage() {
     completed: allRequests.filter((r) => r.status === RequestStatus.COMPLETED)
       .length,
     unassigned: allRequests.filter((r) => !r.assignedTechnicianId).length,
+    assigned: allRequests.filter(
+      (r) => r.assignedTechnicianId && r.status === RequestStatus.NEW
+    ).length, // ← Добавить
   };
 
   return (
@@ -179,7 +185,7 @@ export default function ManagerPage() {
       {/* Быстрая статистика */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-900">
                 {requestStats.total}
@@ -209,6 +215,12 @@ export default function ManagerPage() {
                 {requestStats.unassigned}
               </div>
               <div className="text-sm text-gray-600">Не назначены</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {requestStats.assigned}
+              </div>
+              <div className="text-sm text-gray-600">Назначены</div>
             </div>
           </div>
         </div>
@@ -273,6 +285,17 @@ export default function ManagerPage() {
               <Settings className="inline h-4 w-4 mr-2" />
               Профиль
             </button>
+            <button
+              onClick={() => setActiveTab("create")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === "create"
+                  ? "border-indigo-500 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <Plus className="inline h-4 w-4 mr-2" />
+              Создать заявку
+            </button>
           </nav>
         </div>
       </div>
@@ -319,6 +342,11 @@ export default function ManagerPage() {
         {activeTab === "profile" && (
           <div className="max-w-2xl">
             <ManagerProfile user={user} />
+          </div>
+        )}
+        {activeTab === "create" && (
+          <div>
+            <CreateRequestForm onSuccess={() => setActiveTab("requests")} />
           </div>
         )}
       </div>
@@ -537,6 +565,14 @@ function ManagerProfile({ user }: any) {
   );
 }
 
+interface AssignTechnicianModalProps {
+  request: MaintenanceRequest;
+  technicians: any[]; // или можете типизировать как User[]
+  onAssign: (technicianId: string) => void; // ← Явная типизация
+  onClose: () => void;
+  isUpdating: boolean;
+}
+
 // Компонент модального окна назначения (заглушка)
 function AssignTechnicianModal({
   request,
@@ -544,7 +580,7 @@ function AssignTechnicianModal({
   onAssign,
   onClose,
   isUpdating,
-}: any) {
+}: AssignTechnicianModalProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
