@@ -57,11 +57,10 @@ export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Функция получения пути дашборда - MOVED ABOVE useMemo
   const getDashboardPath = useCallback((role: UserRole): string => {
     switch (role) {
       case UserRole.SUPER_ADMIN:
-        return "/admin";
+        return "/admin"; // Изменено с /super-admin на /admin
       case UserRole.MANAGER:
         return "/manager";
       case UserRole.TECHNICIAN:
@@ -73,7 +72,6 @@ export function Navbar() {
     }
   }, []);
 
-  // Debounced функции для оптимизации
   const debouncedLogout = useDebouncedCallback(async () => {
     try {
       await logout();
@@ -121,6 +119,15 @@ export function Navbar() {
         label: "Все заявки",
         icon: ClipboardList,
         description: "Управление всеми заявками",
+      });
+    }
+
+    if (canCreateRequests) {
+      requestItems.push({
+        href: "/requests/create",
+        label: "Новая заявка",
+        icon: Plus,
+        description: "Создать заявку на ремонт",
       });
     }
 

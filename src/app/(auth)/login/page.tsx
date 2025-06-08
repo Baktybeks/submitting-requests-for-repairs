@@ -118,7 +118,7 @@ function LoginForm() {
   const redirectByRole = (role: UserRole) => {
     switch (role) {
       case UserRole.SUPER_ADMIN:
-        router.push("/super-admin");
+        router.push("/admin"); // Изменено с /super-admin на /admin
         break;
       case UserRole.MANAGER:
         router.push("/manager");

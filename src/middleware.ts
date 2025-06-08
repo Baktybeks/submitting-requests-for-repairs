@@ -1,5 +1,3 @@
-// src/middleware.ts (обновленная версия)
-
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { UserRole } from "@/types";
@@ -67,8 +65,8 @@ export function middleware(request: NextRequest) {
     return redirectByRole(user.role, request);
   }
 
-  // Общий дашборд - доступ для всех авторизованных пользователей
-  if (path.startsWith("/dashboard")) {
+  // Общие маршруты заявок - доступ для всех, кто может создавать/просматривать заявки
+  if (path.startsWith("/requests")) {
     return NextResponse.next();
   }
 
@@ -85,7 +83,7 @@ function redirectByRole(role: UserRole, request: NextRequest) {
 
   switch (role) {
     case UserRole.SUPER_ADMIN:
-      path = "/admin";
+      path = "/admin"; // Изменено с /super-admin на /admin
       break;
     case UserRole.MANAGER:
       path = "/manager";
@@ -112,6 +110,7 @@ export const config = {
     "/manager/:path*",
     "/technician/:path*",
     "/requester/:path*",
+    "/requests/:path*", // ← Добавьте эту строку
     "/dashboard/:path*",
     "/login",
     "/register",
