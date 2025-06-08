@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "BAMORA",
+  title: "Система заявок",
   description: "Платформа подачи заявок на ремонт и обслуживание помещений",
 };
 

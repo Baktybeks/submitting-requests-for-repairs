@@ -70,6 +70,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Профиль - доступ для всех авторизованных пользователей
+  if (path.startsWith("/profile")) {
+    return NextResponse.next();
+  }
+
   // Перенаправление с главной страницы
   if (path === "/") {
     return redirectByRole(user.role, request);
@@ -83,7 +88,7 @@ function redirectByRole(role: UserRole, request: NextRequest) {
 
   switch (role) {
     case UserRole.SUPER_ADMIN:
-      path = "/admin"; // Изменено с /super-admin на /admin
+      path = "/admin";
       break;
     case UserRole.MANAGER:
       path = "/manager";
@@ -110,7 +115,8 @@ export const config = {
     "/manager/:path*",
     "/technician/:path*",
     "/requester/:path*",
-    "/requests/:path*", // ← Добавьте эту строку
+    "/requests/:path*",
+    "/profile/:path*", // ← Добавлена поддержка маршрутов профиля
     "/dashboard/:path*",
     "/login",
     "/register",
