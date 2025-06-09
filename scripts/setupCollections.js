@@ -1,4 +1,4 @@
-// scripts/setupMaintenanceCollections.js
+// scripts/setupAllCollections.js - Настройка всех коллекций (заявки + опросы)
 const { Client, Databases, Permission, Role } = require("node-appwrite");
 require("dotenv").config({ path: ".env.local" });
 
@@ -8,6 +8,7 @@ const appwriteConfig = {
   projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || "",
   databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || "",
   collections: {
+    // Коллекции системы заявок
     users: process.env.NEXT_PUBLIC_USERS_COLLECTION_ID || "users",
     maintenanceRequests:
       process.env.NEXT_PUBLIC_MAINTENANCE_REQUESTS_COLLECTION_ID ||
@@ -21,10 +22,25 @@ const appwriteConfig = {
     requestAttachments:
       process.env.NEXT_PUBLIC_REQUEST_ATTACHMENTS_COLLECTION_ID ||
       "request_attachments",
+
+    // Коллекции системы опросов
+    surveys: process.env.NEXT_PUBLIC_SURVEYS_COLLECTION_ID || "surveys",
+    surveyQuestions:
+      process.env.NEXT_PUBLIC_SURVEY_QUESTIONS_COLLECTION_ID ||
+      "survey_questions",
+    surveyPeriods:
+      process.env.NEXT_PUBLIC_SURVEY_PERIODS_COLLECTION_ID || "survey_periods",
+    surveyResponses:
+      process.env.NEXT_PUBLIC_SURVEY_RESPONSES_COLLECTION_ID ||
+      "survey_responses",
+    surveyQuestionAnswers:
+      process.env.NEXT_PUBLIC_SURVEY_QUESTION_ANSWERS_COLLECTION_ID ||
+      "survey_question_answers",
   },
 };
 
 const COLLECTION_SCHEMAS = {
+  // === СИСТЕМА ЗАЯВОК ===
   users: {
     name: { type: "string", required: true, size: 255 },
     email: { type: "email", required: true, size: 320 },
@@ -106,9 +122,52 @@ const COLLECTION_SCHEMAS = {
     uploadedBy: { type: "string", required: true, size: 36 },
     createdAt: { type: "datetime", required: true },
   },
+
+  // === СИСТЕМА ОПРОСОВ ===
+  surveys: {
+    title: { type: "string", required: true, size: 255 },
+    description: { type: "string", required: true, size: 2000 },
+    createdBy: { type: "string", required: true, size: 36 },
+    isActive: { type: "boolean", required: false, default: true },
+    createdAt: { type: "datetime", required: true },
+  },
+
+  surveyQuestions: {
+    surveyId: { type: "string", required: true, size: 36 },
+    text: { type: "string", required: true, size: 1000 },
+    order: { type: "integer", required: true, min: 1 },
+    createdAt: { type: "datetime", required: true },
+  },
+
+  surveyPeriods: {
+    surveyId: { type: "string", required: true, size: 36 },
+    title: { type: "string", required: true, size: 255 },
+    startDate: { type: "datetime", required: true },
+    endDate: { type: "datetime", required: true },
+    isActive: { type: "boolean", required: false, default: true },
+    createdBy: { type: "string", required: true, size: 36 },
+    createdAt: { type: "datetime", required: true },
+  },
+
+  surveyResponses: {
+    surveyId: { type: "string", required: true, size: 36 },
+    periodId: { type: "string", required: true, size: 36 },
+    userId: { type: "string", required: true, size: 36 },
+    submittedAt: { type: "datetime", required: true },
+    isCompleted: { type: "boolean", required: false, default: false },
+  },
+
+  surveyQuestionAnswers: {
+    responseId: { type: "string", required: true, size: 36 },
+    questionId: { type: "string", required: true, size: 36 },
+    rating: { type: "integer", required: true, min: 1, max: 10 },
+    comment: { type: "string", required: false, size: 1000 },
+    createdAt: { type: "datetime", required: true },
+  },
 };
 
 const COLLECTION_INDEXES = {
+  // === СИСТЕМА ЗАЯВОК ===
   users: [
     { key: "email", type: "unique" },
     { key: "role", type: "key" },
@@ -145,6 +204,43 @@ const COLLECTION_INDEXES = {
   requestAttachments: [
     { key: "requestId", type: "key" },
     { key: "uploadedBy", type: "key" },
+    { key: "createdAt", type: "key" },
+  ],
+
+  // === СИСТЕМА ОПРОСОВ ===
+  surveys: [
+    { key: "createdBy", type: "key" },
+    { key: "isActive", type: "key" },
+    { key: "createdAt", type: "key" },
+  ],
+
+  surveyQuestions: [
+    { key: "surveyId", type: "key" },
+    { key: "order", type: "key" },
+    { key: "createdAt", type: "key" },
+  ],
+
+  surveyPeriods: [
+    { key: "surveyId", type: "key" },
+    { key: "isActive", type: "key" },
+    { key: "startDate", type: "key" },
+    { key: "endDate", type: "key" },
+    { key: "createdBy", type: "key" },
+    { key: "createdAt", type: "key" },
+  ],
+
+  surveyResponses: [
+    { key: "surveyId", type: "key" },
+    { key: "periodId", type: "key" },
+    { key: "userId", type: "key" },
+    { key: "isCompleted", type: "key" },
+    { key: "submittedAt", type: "key" },
+  ],
+
+  surveyQuestionAnswers: [
+    { key: "responseId", type: "key" },
+    { key: "questionId", type: "key" },
+    { key: "rating", type: "key" },
     { key: "createdAt", type: "key" },
   ],
 };
@@ -273,12 +369,45 @@ const createIndex = async (databaseId, collectionId, indexConfig) => {
   }
 };
 
-const setupCollections = async () => {
+const setupCollections = async (mode = "all") => {
   try {
-    console.log("🚀 Начинаем создание коллекций для системы заявок...");
+    console.log("🚀 Начинаем создание коллекций...");
+
+    let collectionsToCreate = COLLECTION_SCHEMAS;
+
+    if (mode === "maintenance") {
+      collectionsToCreate = Object.fromEntries(
+        Object.entries(COLLECTION_SCHEMAS).filter(([name]) =>
+          [
+            "users",
+            "maintenanceRequests",
+            "requestComments",
+            "requestHistory",
+            "requestAttachments",
+          ].includes(name)
+        )
+      );
+      console.log("📋 Режим: только коллекции системы заявок");
+    } else if (mode === "surveys") {
+      collectionsToCreate = Object.fromEntries(
+        Object.entries(COLLECTION_SCHEMAS).filter(([name]) =>
+          [
+            "surveys",
+            "surveyQuestions",
+            "surveyPeriods",
+            "surveyResponses",
+            "surveyQuestionAnswers",
+          ].includes(name)
+        )
+      );
+      console.log("📋 Режим: только коллекции системы опросов");
+    } else {
+      console.log("📋 Режим: все коллекции");
+    }
+
     console.log(
       "📋 Всего коллекций для создания:",
-      Object.keys(COLLECTION_SCHEMAS).length
+      Object.keys(collectionsToCreate).length
     );
 
     const databaseId = appwriteConfig.databaseId;
@@ -287,7 +416,9 @@ const setupCollections = async () => {
       throw new Error("Database ID не найден! Проверьте переменные окружения.");
     }
 
-    for (const [collectionName, schema] of Object.entries(COLLECTION_SCHEMAS)) {
+    for (const [collectionName, schema] of Object.entries(
+      collectionsToCreate
+    )) {
       console.log(`\n📁 Создание коллекции: ${collectionName}`);
 
       try {
@@ -377,14 +508,34 @@ const setupCollections = async () => {
   }
 };
 
-const resetCollections = async () => {
+const resetCollections = async (mode = "all") => {
   try {
     console.log("🗑️ Удаление существующих коллекций...");
 
     const databaseId = appwriteConfig.databaseId;
     let deletedCount = 0;
 
-    for (const [collectionName] of Object.entries(COLLECTION_SCHEMAS)) {
+    let collectionsToDelete = Object.keys(COLLECTION_SCHEMAS);
+
+    if (mode === "maintenance") {
+      collectionsToDelete = [
+        "users",
+        "maintenanceRequests",
+        "requestComments",
+        "requestHistory",
+        "requestAttachments",
+      ];
+    } else if (mode === "surveys") {
+      collectionsToDelete = [
+        "surveys",
+        "surveyQuestions",
+        "surveyPeriods",
+        "surveyResponses",
+        "surveyQuestionAnswers",
+      ];
+    }
+
+    for (const collectionName of collectionsToDelete) {
       try {
         const collectionId = appwriteConfig.collections[collectionName];
         await databases.deleteCollection(databaseId, collectionId);
@@ -422,32 +573,45 @@ const checkEnvironment = () => {
 };
 
 const main = async () => {
-  console.log("🔧 Maintenance Requests System - Настройка базы данных\n");
+  console.log("🔧 Maintenance + Survey System - Настройка базы данных\n");
 
   checkEnvironment();
 
   const command = process.argv[2];
+  const mode = process.argv[3] || "all"; // all, maintenance, surveys
 
   switch (command) {
     case "setup":
-      await setupCollections();
+      await setupCollections(mode);
       break;
     case "reset":
-      await resetCollections();
+      await resetCollections(mode);
       break;
     case "reset-setup":
-      await resetCollections();
+      await resetCollections(mode);
       console.log("\n⏳ Ожидание 3 секунды перед созданием...");
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      await setupCollections();
+      await setupCollections(mode);
       break;
     default:
       console.log("📖 Использование:");
       console.log(
-        "  node scripts/setupMaintenanceCollections.js reset        - Удалить коллекции"
+        "  node scripts/setupAllCollections.js setup [mode]         - Создать коллекции"
       );
       console.log(
-        "  node scripts/setupMaintenanceCollections.js reset-setup  - Пересоздать коллекции"
+        "  node scripts/setupAllCollections.js reset [mode]         - Удалить коллекции"
+      );
+      console.log(
+        "  node scripts/setupAllCollections.js reset-setup [mode]   - Пересоздать коллекции"
+      );
+      console.log("\nРежимы:");
+      console.log("  all          - Все коллекции (по умолчанию)");
+      console.log("  maintenance  - Только коллекции системы заявок");
+      console.log("  surveys      - Только коллекции системы опросов");
+      console.log("\nПримеры:");
+      console.log("  node scripts/setupAllCollections.js setup surveys");
+      console.log(
+        "  node scripts/setupAllCollections.js reset-setup maintenance"
       );
       break;
   }

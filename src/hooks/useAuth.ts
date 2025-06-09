@@ -1,4 +1,4 @@
-// src/hooks/useAuth.ts (Исправленная версия)
+// src/hooks/useAuth.ts (Исправленная версия с исправлением типов)
 
 import { useAuthStore } from "@/store/authStore";
 import {
@@ -55,22 +55,43 @@ interface AuthHookReturn {
   canUpdateRequestStatus: boolean;
 }
 
-// Функция-помощник для безопасной проверки типа
-const isNotActivatedUser = (user: any): user is { notActivated: true } => {
+// Типы для проверки пользователя
+interface NotActivatedUser {
+  notActivated: true;
+  email?: string;
+  message?: string;
+}
+
+interface ValidUser {
+  $id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  specialization?: string;
+  phone?: string;
+}
+
+// Type guards
+const isNotActivatedUser = (user: any): user is NotActivatedUser => {
   return (
     user !== null &&
     user !== undefined &&
     typeof user === "object" &&
-    "notActivated" in user
+    "notActivated" in user &&
+    user.notActivated === true
   );
 };
 
-const isValidUser = (user: any): boolean => {
+const isValidUser = (user: any): user is ValidUser => {
   return (
     user !== null &&
     user !== undefined &&
     typeof user === "object" &&
-    !("notActivated" in user)
+    !("notActivated" in user) &&
+    "$id" in user &&
+    "email" in user &&
+    "role" in user
   );
 };
 
@@ -82,7 +103,7 @@ export function useAuth(): AuthHookReturn {
     data: currentUser,
     isLoading: isCheckingAuth,
     error: authError,
-    refetch: refetchCurrentUser, // ИСПРАВЛЕНО: правильное название свойства
+    refetch: refetchCurrentUser,
   } = useCurrentUser();
 
   const loginMutation = useLogin();
@@ -93,8 +114,9 @@ export function useAuth(): AuthHookReturn {
   // ИСПРАВЛЕНО: Безопасная синхронизация состояния Zustand с React Query
   useEffect(() => {
     try {
-      // Проверяем, что currentUser определен и является объектом
+      // Проверяем, что currentUser определен и является валидным пользователем
       if (isValidUser(currentUser)) {
+        // Теперь TypeScript знает, что currentUser имеет тип ValidUser
         setUser(currentUser);
       } else if (
         currentUser === null ||
@@ -113,9 +135,19 @@ export function useAuth(): AuthHookReturn {
   const login = useCallback(
     async (email: string, password: string) => {
       try {
-        const user = await loginMutation.mutateAsync({ email, password });
-        setUser(user);
-        return user;
+        const result = await loginMutation.mutateAsync({ email, password });
+
+        // Проверяем результат логина
+        if (isValidUser(result)) {
+          setUser(result);
+          return result;
+        } else if (isNotActivatedUser(result)) {
+          // Не активированный пользователь - не устанавливаем в store
+          clearUser();
+          throw new Error("Аккаунт не активирован");
+        } else {
+          throw new Error("Неожиданный формат ответа от сервера");
+        }
       } catch (error: any) {
         clearUser();
 
@@ -124,7 +156,8 @@ export function useAuth(): AuthHookReturn {
 
         if (
           message.includes("не активирован") ||
-          message.includes("not activated")
+          message.includes("not activated") ||
+          message.includes("Аккаунт не активирован")
         ) {
           // Не показываем toast для неактивированных аккаунтов,
           // это обрабатывается в компоненте
@@ -189,7 +222,7 @@ export function useAuth(): AuthHookReturn {
         });
 
         // Если первый пользователь (супер-админ), автоматически авторизуем
-        if (result.isFirstUser) {
+        if (result.isFirstUser && isValidUser(result.user)) {
           setUser(result.user);
         }
 
@@ -347,7 +380,7 @@ export function useProtectedAction(
 
 // ИСПРАВЛЕНО: Хук для автообновления токена
 export function useAuthRefresh() {
-  const { data: currentUser, refetch: refetchCurrentUser } = useCurrentUser(); // ИСПРАВЛЕНО
+  const { data: currentUser, refetch: refetchCurrentUser } = useCurrentUser();
 
   useEffect(() => {
     // Проверяем сессию каждые 15 минут
@@ -356,7 +389,7 @@ export function useAuthRefresh() {
     }, 15 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [refetchCurrentUser]); // ИСПРАВЛЕНО
+  }, [refetchCurrentUser]);
 }
 
 // Хук для отслеживания времени неактивности

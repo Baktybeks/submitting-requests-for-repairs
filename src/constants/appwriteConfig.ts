@@ -1,4 +1,4 @@
-// src/constants/appwriteConfig.ts (обновленная версия)
+// src/constants/appwriteConfig.ts (обновленная версия с опросами)
 
 export const appwriteConfig = {
   endpoint:
@@ -6,6 +6,7 @@ export const appwriteConfig = {
   projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || "",
   databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || "",
   collections: {
+    // Существующие коллекции для системы заявок
     users: process.env.NEXT_PUBLIC_USERS_COLLECTION_ID || "users",
     maintenanceRequests:
       process.env.NEXT_PUBLIC_MAINTENANCE_REQUESTS_COLLECTION_ID ||
@@ -19,6 +20,20 @@ export const appwriteConfig = {
     requestAttachments:
       process.env.NEXT_PUBLIC_REQUEST_ATTACHMENTS_COLLECTION_ID ||
       "request_attachments",
+
+    // Новые коллекции для системы опросов
+    surveys: process.env.NEXT_PUBLIC_SURVEYS_COLLECTION_ID || "surveys",
+    surveyQuestions:
+      process.env.NEXT_PUBLIC_SURVEY_QUESTIONS_COLLECTION_ID ||
+      "survey_questions",
+    surveyPeriods:
+      process.env.NEXT_PUBLIC_SURVEY_PERIODS_COLLECTION_ID || "survey_periods",
+    surveyResponses:
+      process.env.NEXT_PUBLIC_SURVEY_RESPONSES_COLLECTION_ID ||
+      "survey_responses",
+    surveyQuestionAnswers:
+      process.env.NEXT_PUBLIC_SURVEY_QUESTION_ANSWERS_COLLECTION_ID ||
+      "survey_question_answers",
   },
 } as const;
 
@@ -30,12 +45,18 @@ const requiredEnvVars = [
   "NEXT_PUBLIC_APPWRITE_ENDPOINT",
   "NEXT_PUBLIC_APPWRITE_PROJECT_ID",
   "NEXT_PUBLIC_APPWRITE_DATABASE_ID",
-  // Collection IDs
+  // Collection IDs для заявок
   "NEXT_PUBLIC_USERS_COLLECTION_ID",
   "NEXT_PUBLIC_MAINTENANCE_REQUESTS_COLLECTION_ID",
   "NEXT_PUBLIC_REQUEST_COMMENTS_COLLECTION_ID",
   "NEXT_PUBLIC_REQUEST_HISTORY_COLLECTION_ID",
   "NEXT_PUBLIC_REQUEST_ATTACHMENTS_COLLECTION_ID",
+  // Collection IDs для опросов
+  "NEXT_PUBLIC_SURVEYS_COLLECTION_ID",
+  "NEXT_PUBLIC_SURVEY_QUESTIONS_COLLECTION_ID",
+  "NEXT_PUBLIC_SURVEY_PERIODS_COLLECTION_ID",
+  "NEXT_PUBLIC_SURVEY_RESPONSES_COLLECTION_ID",
+  "NEXT_PUBLIC_SURVEY_QUESTION_ANSWERS_COLLECTION_ID",
 ] as const;
 
 // Проверка отсутствующих переменных
@@ -86,6 +107,21 @@ export const validateAppwriteConfig = (): boolean => {
 
   console.log("✅ Конфигурация Appwrite валидна");
   return true;
+};
+
+// Проверка доступности коллекций опросов
+export const isSurveySystemEnabled = (): boolean => {
+  const surveyCollections = [
+    "surveys",
+    "surveyQuestions",
+    "surveyPeriods",
+    "surveyResponses",
+    "surveyQuestionAnswers",
+  ] as const;
+
+  return surveyCollections.every(
+    (collection) => appwriteConfig.collections[collection] !== ""
+  );
 };
 
 // Экспорт для использования в других частях приложения
