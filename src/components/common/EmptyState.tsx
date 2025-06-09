@@ -1,4 +1,6 @@
-// src/components/common/EmptyState.tsx - Пустое состояние
+// src/components/common/EmptyState.tsx - Исправленный компонент пустого состояния
+
+import React from "react";
 
 interface EmptyStateProps {
   icon?: React.ComponentType<{ className?: string }>;

@@ -1,4 +1,7 @@
-// src/components/common/Confirmation.tsx - Модальное окно подтверждения
+// src/components/common/Confirmation.tsx - Исправленный компонент модального окна подтверждения
+
+import React from "react";
+import { AlertTriangle, MessageSquare } from "lucide-react";
 
 interface ConfirmationProps {
   isOpen: boolean;

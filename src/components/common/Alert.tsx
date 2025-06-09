@@ -1,4 +1,7 @@
-// src/components/common/Alert.tsx - Компонент уведомлений
+// src/components/common/Alert.tsx - Исправленный компонент уведомлений
+
+import React from "react";
+import { CheckCircle, AlertTriangle, MessageSquare, X } from "lucide-react";
 
 interface AlertProps {
   type: "success" | "error" | "warning" | "info";
