@@ -618,22 +618,6 @@ function UserProfileDropdown({
   );
 }
 
-// Компонент кнопки поиска
-function SearchButton() {
-  return (
-    <button
-      onClick={() => {
-        // TODO: Открыть модальное окно поиска
-        console.log("Открыть поиск");
-      }}
-      className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md transition-colors"
-      title="Поиск"
-    >
-      <Search className="h-5 w-5" />
-    </button>
-  );
-}
-
 // Компонент кнопки уведомлений
 function NotificationButton() {
   const [hasUnread] = useState(false); // TODO: Подключить к реальным данным
@@ -645,12 +629,27 @@ function NotificationButton() {
         console.log("Открыть уведомления");
       }}
       className="relative p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md transition-colors"
-      title="Уведомления"
+      aria-label="Уведомления"
     >
       <Bell className="h-5 w-5" />
       {hasUnread && (
         <span className="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white" />
       )}
+    </button>
+  );
+}
+
+function SearchButton() {
+  return (
+    <button
+      onClick={() => {
+        // TODO: Открыть модальное окно поиска
+        console.log("Открыть поиск");
+      }}
+      className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md transition-colors"
+      aria-label="Поиск"
+    >
+      <Search className="h-5 w-5" />
     </button>
   );
 }

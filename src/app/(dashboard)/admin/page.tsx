@@ -388,15 +388,13 @@ function UsersList({
                         {getRoleLabel(user.role)}
                       </span>
                       {user.isActive ? (
-                        <CheckCircle
-                          className="ml-2 h-4 w-4 text-green-500"
-                          title="Активен"
-                        />
+                        <div title="Активен" className="ml-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        </div>
                       ) : (
-                        <Clock
-                          className="ml-2 h-4 w-4 text-yellow-500"
-                          title="Неактивен"
-                        />
+                        <div title="Неактивен" className="ml-2">
+                          <Clock className="h-4 w-4 text-yellow-500" />
+                        </div>
                       )}
                     </div>
                     <div className="text-sm text-gray-500">{user.email}</div>
